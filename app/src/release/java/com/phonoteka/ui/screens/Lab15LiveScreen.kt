@@ -14,17 +14,26 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
-/** Release: локальный сетевой стенд в сборку не попадает. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun Lab15LiveScreen(onBack: () -> Unit) {
-    Scaffold(topBar = {
-        TopAppBar(title = { Text("Живой WSS · ЛР15") }, navigationIcon = {
-            TextButton(onClick = onBack) { Text("Назад") }
-        })
-    }) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Локальный сетевой стенд доступен только в debug.", style = MaterialTheme.typography.bodyMedium)
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Живой WSS · ЛР15") },
+                navigationIcon = { TextButton(onClick = onBack) { Text("Назад") } }
+            )
+        }
+    ) { padding ->
+        Column(
+            Modifier.fillMaxSize().padding(padding).padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                "Локальный сетевой стенд доступен только в debug-сборке: в release нет ни " +
+                    "лабораторного сертификата, ни пинов для localhost.",
+                style = MaterialTheme.typography.bodyMedium
+            )
         }
     }
 }

@@ -15,7 +15,8 @@ import org.junit.Test
 /** ЛР15 (усложнения): mTLS — сервер требует клиентский сертификат; отказ от TLS 1.0/1.1. Всё на своих временных сертификатах. */
 class MtlsAndTlsVersionTest {
     private val ca = HeldCertificate.Builder().certificateAuthority(0).commonName("lab15-ca").build()
-    private val serverCert = HeldCertificate.Builder().addSubjectAlternativeName("localhost").signedBy(ca).build()
+    private val serverCert = HeldCertificate.Builder().addSubjectAlternativeName("localhost")
+        .addSubjectAlternativeName("127.0.0.1").signedBy(ca).build()
     private val clientCert = HeldCertificate.Builder().commonName("phonoteka-device").signedBy(ca).build()
 
     private fun server(): MockWebServer {
@@ -35,14 +36,14 @@ class MtlsAndTlsVersionTest {
 
     @Test fun mtlsWithClientCertificateSucceeds() {
         server().use { s ->
-            client(true).newCall(Request.Builder().url(s.url("/").newBuilder().host("localhost").build()).build()).execute().use { assertEquals(200, it.code) }
+            client(true).newCall(Request.Builder().url(s.url("/")).build()).execute().use { assertEquals(200, it.code) }
             assertEquals("phonoteka-device", (s.takeRequest().handshake!!.peerPrincipal!!.name).substringAfter("CN=").substringBefore(","))
         }
     }
 
     @Test fun mtlsWithoutClientCertificateIsRejected() {
         server().use { s ->
-            val failed = runCatching { client(false).newCall(Request.Builder().url(s.url("/").newBuilder().host("localhost").build()).build()).execute().close() }.isFailure
+            val failed = runCatching { client(false).newCall(Request.Builder().url(s.url("/")).build()).execute().close() }.isFailure
             assertTrue(failed)
         }
     }

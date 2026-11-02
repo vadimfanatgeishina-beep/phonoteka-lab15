@@ -112,7 +112,7 @@ dependencies {
 
     // Debug
     debugImplementation("androidx.compose.ui:ui-tooling")
-    // ЛР15: локальный TLS-стенд pinning живёт только в debug-сборке
+    // Local pinning scenarios are implemented in debug source and require the TLS test server.
     debugImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     debugImplementation("com.squareup.okhttp3:okhttp-tls:4.12.0")
 

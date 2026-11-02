@@ -4,7 +4,7 @@
 Стенд: `java tools/LocalLab15MockServer.java` (HTTPS 8443) и `java tools/LocalLab15WssServer.java` (WSS 8444), `adb reverse tcp:8443 tcp:8443`, `adb reverse tcp:8444 tcp:8444`.
 
 ## 3 доказательства (скриншоты в отчёт)
-1. **Без пиннинга** (временно убрать pin-set из debug NSC и добавить `<certificates src="user"/>`) — mitmproxy видит запрос. Но подмена тела в mitmproxy → сервер отвечает 401 (HMAC), повтор (replay) → 409.
+1. **Без пиннинга** (временно убрать блок `pin-set` из debug NSC; доверие пользовательскому CA уже включено блоком `<debug-overrides>`, отдельно добавлять `<certificates src="user"/>` не нужно) — mitmproxy видит запрос. Но подмена тела в mitmproxy → сервер отвечает 401 (HMAC), повтор (replay) → 409.
 2. **С пиннингом** (как в проекте) — соединение обрывается, в logcat `SSLPeerUnverifiedException: Certificate pinning failure`, в mitmproxy «client disconnected / TLS handshake failed».
 3. **HTTP-stripping** — запрос на `http://` отклоняется самим Android: `CLEARTEXT communication not permitted by network security policy`.
 

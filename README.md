@@ -1,73 +1,133 @@
-# ЛР15 — Безопасная передача
+# Фонотека — ЛР15. Безопасная передача данных
 
-Версия v15: Фонотека + только требования ЛР15. Экран лабы открывается из меню **⋮ → «Экран ЛР15»**, список требований — **⋮ → «О версии»**.
+Приложение прослушивания музыки, к которому добавлен защищённый канал: TLS с пиннингом,
+подпись запросов, защита от replay и WebSocket с теми же гарантиями, что и REST.
 
-## Как запустить
+## Что где лежит
 
-Debug-сборка, учебный стенд только на loopback:
-
-```bash
-export PHONOTEKA_MOCK_HMAC_KEY=<учебный ключ ≥ 16 символов>
-./gradlew assembleDebug
-```
-
-Для ручных сценариев со стендом дополнительно нужен PKCS12-ключ:
-
-```bash
-java tools/LocalLab15MockServer.java     # HTTPS 8443, читает PHONOTEKA_MOCK_KEYSTORE* из env
-adb reverse tcp:8443 tcp:8443
-```
-
-Приватные ключи и пароли в репозитории не хранятся: `tools/run_owned_tls_contract.py` генерирует их во временной папке и удаляет. В release `LOCAL_FIXTURE_KEY` пустая, поэтому локальные демонстрации в релиз не попадают.
-
-## Требования ТЗ и где они в коде
-
-| Требование | Где |
+| Требование | Где смотреть |
 |---|---|
-| HTTPS мок-сервер с самоподписанным сертификатом | `tools/LocalLab15MockServer.java`, `tools/run_owned_tls_contract.py` |
-| NSC: cleartext запрещён в release, отдельный debug-профиль | `app/src/main/res/xml/network_security_config.xml`, `app/src/debug/res/xml/network_security_config.xml` |
-| Пиннинг: два SPKI-пина с expiration, fail closed | debug NSC (`pin-set`, срок 2036-01-01) + `security/LocalMockTlsClient.kt`, `security/Lab15PinScenarios.kt` |
-| HMAC-подпись запроса | `security/RequestSigning.kt` |
-| Replay-защита: окно ±30 с, уникальность nonce | `HmacRequestSigner.verify`, `ReplayGuard` |
-| Понятное сообщение при рассинхроне часов | `security/ClockSkewNotice.kt`, строка в блоке «1. Подпись запросов» |
-| WebSocket wss:// с backoff и подписью кадров | `security/LocalLiveSocket.kt`, `LocalReconnectPolicy.kt`, `SignedWebSocketFrames.kt`, `SocketUserBinding.kt` |
-| Таблица 8 проверок | `LAB15_MITM.md` |
-
-Усложнения (TrustKit, mTLS, ротация, E2EE, отказ TLS 1.0) — в `LAB_15.md` и `LAB15_TRUSTKIT.md`.
+| Network Security Config, cleartext запрещён в release | `app/src/main/res/xml/network_security_config.xml` (release) и `app/src/debug/res/xml/network_security_config.xml` (debug) |
+| Два SPKI-пина + `expiration` | `app/src/debug/res/xml/network_security_config.xml`, блок `pin-set` |
+| Пиннинг в коде, fail closed | `app/src/debug/java/com/phonoteka/security/LocalMockTlsClient.kt` (`CertificatePinner`, два пина) |
+| HMAC-подпись запроса | `app/src/main/java/com/phonoteka/security/RequestSigning.kt` (`HmacRequestSigner`, `HmacSigningInterceptor`) |
+| Окно ±30 с и уникальность nonce | `RequestSigning.kt` (`verify(...)`, `ReplayGuard`) |
+| Понятный текст про рассинхрон часов | `app/src/main/java/com/phonoteka/security/ClockSkewNotice.kt` |
+| WebSocket wss://, backoff, подпись кадров | `security/LocalLiveSocket.kt`, `security/LocalReconnectPolicy.kt`, `security/SignedWebSocketFrames.kt` |
+| E2EE истории (ECDH P-256 + AES-GCM) | `security/E2eeHistory.kt` |
+| Мок-сервер (HTTPS, самоподписанный сертификат) | JVM-тесты на MockWebServer + стенды `tools/LocalLab15MockServer.java`, `tools/LocalLab15WssServer.java` |
+| Таблица ошибок канала, MITM-эксперимент | `LAB15_MITM.md` |
+| Сравнение с TrustKit | `LAB15_TRUSTKIT.md` |
+| Протокол подписи целиком | `LAB15_PROTOCOL.md` |
 
 ## Canonical-строка подписи
 
-UTF-8, ровно пять строк, разделитель LF, завершающего LF нет:
+Контракт зафиксирован: пять строк, разделитель — `\n` (LF), завершающего перевода строки нет.
 
-```text
-METHOD_UPPERCASE
-RAW_PATH_WITH_OPTIONAL_RAW_QUERY
-TIMESTAMP_DECIMAL_SECONDS
-NONCE
-SHA256_HEX_OF_BODY
+```
+METHOD\n
+path\n
+timestamp\n
+nonce\n
+sha256hex(body)
 ```
 
-Подпись — HMAC-SHA256 по этим байтам, hex. Порядок и разделители — часть контракта: их изменение ломает совместимость с сервером. Подробнее — `LAB15_PROTOCOL.md`.
+Пример для `POST /api/history`, тела `{"trackId":42}`, `ts=1730000000`, `nonce=6f1c…`:
+
+```
+POST
+/api/history
+1730000000
+6f1c9d2a4b8e5f70
+9f2c1c0b7a5d4e3f2b1a0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f
+```
+
+Правила, которые нельзя менять местами с сервером:
+
+- метод — в верхнем регистре;
+- `path` — только `encodedPath`, query-строка добавляется к нему как есть (`?a=b`), если есть;
+- тело подписывается **хешем** SHA-256, а не байтами: большие файлы не ломают подпись;
+- `timestamp` — секунды Unix, десятичное число без ведущих нулей;
+- `nonce` — 16–64 символа `[A-Za-z0-9_-]`, генерируется `SecureRandom` на каждый запрос;
+- подпись — HMAC-SHA256 в hex нижнем регистре, заголовки `X-Timestamp`, `X-Nonce`, `X-Signature`.
+
+Сервер отклоняет: `401 Signature` (подпись не сошлась), `401 Clock` (вне окна ±30 с),
+`409 Replay` (nonce уже видели), `401 Nonce` (формат не подходит), `503 ReplayCacheFull`.
+
+## Что произойдёт при сбитых часах и как это лечат
+
+Если на устройстве вручную выставить время на 5 минут вперёд или назад, `timestamp` уедет за
+окно ±30 с и сервер ответит `401`. Клиент не может отличить «часы врут» от «подпись неверна»
+по коду ответа, поэтому `ClockSkewNotice` разворачивает `EXPIRED` в текст: на сколько секунд
+устройство отстаёт или спешит, почему запрос отклонён и что делать (включить автосинхронизацию
+времени и повторить запрос заново — старую подпись переиспользовать нельзя, у неё уже истёк nonce).
+
+Лечение в проде: NTP-синхронизация на устройстве, а на сервере — маркер рассинхрона в ответе
+(например, заголовок `X-Server-Time`), чтобы клиент сам поправил смещение и не показывал
+пользователю техническую ошибку.
 
 ## План ротации пинов
 
-1. В `pin-set` всегда два пина: текущий сертификат и запасной, выпущенный заранее.
-2. Новый сертификат вводится в эксплуатацию, пока запасной пин ещё не истёк: приложение продолжает работать на старом.
-3. После того как все клиенты обновлены, старый пин убирается, а на его место ставится следующий запасной.
-4. `expiration` в `pin-set` ограничивает срок жизни пинов: если пины не обновить, проверка перестаёт применяться, и приложение не «залипает» навсегда на мёртвом сертификате.
+В `pin-set` два пина: основной и backup. Оба посчитаны от SPKI сертификатов
+`app/src/debug/res/raw/local_mock_cert.cer` и `local_mock_backup_cert.cer`, `expiration="2036-01-01"`.
 
-Запасной пин проверяется на устройстве: `Lab15PinScenariosDeviceTest.backupCertificateIsAcceptedAfterRotation`.
+Порядок плановой ротации:
 
-## Почему в release не доверяем user-CA
+1. Сгенерировать новую пару ключей и сертификат, посчитать SPKI-SHA-256:
+   `openssl x509 -in new.crt -pubkey -noout | openssl pkey -pubin -outform DER | openssl dgst -sha256 -binary | openssl base64`
+2. Выпустить сборку, где новый пин добавлен **третьим** (старый основной остаётся): приложение
+   продолжает работать со старым сертификатом.
+3. Дождаться, пока обновится достаточная доля установок.
+4. Переключить сервер на новый сертификат — старые клиенты живут на backup-пине.
+5. Следующим релизом убрать отживший пин.
 
-С Android 7 приложения не доверяют пользовательским сертификатам автоматически, и это правильно: иначе любой, кто поставил свой CA (или убедил пользователя его поставить), читал бы трафик приложения. Поэтому:
+`expiration` нужен как страховка: если ротацию забыли, пиннинг перестаёт действовать сам,
+и приложение не превращается в кирпич. Именно поэтому дата стоит далеко (2036), а не «через месяц».
 
-- в release `trust-anchors` — только `system`, cleartext запрещён;
-- CA mitmproxy допускается исключительно в `debug-overrides` debug-сборки, где `android:debuggable="true"`;
-- пиннинг работает поверх доверия: даже «легальный» CA не поможет, если SPKI не совпал с `pin-set`.
+## Почему release не доверяет пользовательским CA
 
-Проверка release-сборки: `usesCleartextTraffic=false`, в NSC только `system`.
+С Android 7 приложения по умолчанию доверяют только системным корневым сертификатам. Это
+защита от главного сценария MITM: пользовательский CA в хранилище может поставить кто угодно
+с доступом к устройству (или злоумышленник, уговоривший поставить «корпоративный профиль»),
+и тогда любой прокси читает трафик приложения.
 
-## Что осталось руками
+Поэтому:
 
-Три доказательства MITM-эксперимента (без пиннинга читается, с пиннингом рвётся, `http://` отклоняется) — пошагово в `LAB15_MITM.md`.
+- в `release` — `<certificates src="system" />`, cleartext запрещён, лабораторный сертификат
+  и пины для `localhost` в прод не едут;
+- в `debug` — блок `<debug-overrides>` с `src="user"`: это единственное законное место для
+  CA mitmproxy, и Android сам вырезает этот блок из release-сборки.
+
+Плата за это — неудобство отладки: чтобы читать трафик прокси, нужна именно debug-сборка.
+Это правильный размен: «неудобно отлаживать» лучше, чем «любой установленный CA читает
+историю прослушиваний».
+
+## Мок-сервер: две реализации
+
+- **MockWebServer** (зависимость `com.squareup.okhttp3:mockwebserver` + `okhttp-tls`) — внутри
+  JVM-тестов: `LocalHttpsMockServerTest`, `LocalWssMockServerTest`, `MtlsAndTlsVersionTest`,
+  `OwnedBackupPinRotationTest`, `OwnedCertificateSubstitutionTest`. Сертификат создаётся
+  в коде через `HeldCertificate`, HTTPS — через `server.useHttps(...)`.
+- **`tools/LocalLab15MockServer.java`** — отдельный стенд для проверок на устройстве
+  (`adb reverse tcp:8443`). Предъявляет тот же сертификат из `res/raw`, приватный ключ
+  приходит из переменной окружения `PHONOTEKA_MOCK_KEYSTORE` и в репозитории отсутствует.
+  Он же выполняет серверную часть проверки подписи: HMAC, окно ±30 с, уникальность nonce.
+  Намеренно без внешних зависимостей — собирается одной командой `javac`, без Gradle.
+
+Прогон стенда и контрактных проверок:
+
+```bash
+JAVA_HOME=... python3 tools/run_owned_tls_contract.py
+```
+
+Скрипт генерирует одноразовый keystore во временной папке, компилирует стенд, прогоняет
+четыре контрактных теста и удаляет приватный материал. Поэтому тест
+`LocalLab15TlsClientTest` не воспроизводится в чистом клоне: он требует внешний стенд и
+`adb reverse`, а новый сертификат не совпадёт с закоммиченными пинами.
+
+## Что остаётся ручным
+
+1. MITM-эксперимент: три доказательства (без пиннинга читается, с пиннингом рвётся,
+   `http://` отклоняется NSC) — `LAB15_MITM.md`.
+2. Прогон `tools/LocalLab15MockServer.java` на машине с `adb reverse` для проверки
+   серверной части подписи.

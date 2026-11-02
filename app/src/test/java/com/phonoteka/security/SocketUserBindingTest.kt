@@ -1,8 +1,10 @@
 package com.phonoteka.security
 
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import okhttp3.*
 import okhttp3.mockwebserver.*
 import okhttp3.tls.HandshakeCertificates
@@ -141,19 +143,19 @@ class SocketUserBindingTest {
         } finally { live.close(); runCurrent(); f.shutdown() }
     }
 
-    @Test fun noActiveUserMeansNoConnectionAttempt() = runTest {
+    @Test fun noActiveUserMeansNoConnectionAttempt() = runBlocking {
         val f = fixture(); f.server.start()
-        val live = LocalLiveSocket(f.client, keys.frameSigner("unused"), backgroundScope, userBinding = SocketUserBinding(keys, { null }))
+        val live = LocalLiveSocket(f.client, keys.frameSigner("unused"), this, userBinding = SocketUserBinding(keys, { null }))
         try {
             live.connect(f.url())
-            val metrics = live.metrics.first { it.terminalError != null }
+            val metrics = withTimeout(10_000) { live.metrics.first { it.terminalError != null } }
             assertEquals(LocalLiveSocket.USER_REQUIRED, metrics.terminalError)
             assertEquals(0, metrics.attempts)
             assertEquals(0, f.server.requestCount)
-        } finally { live.close(); runCurrent(); f.shutdown() }
+        } finally { live.close(); f.shutdown() }
     }
 
-    @Test fun userChangeClosesSocketAndDoesNotReconnectAsNewUser() = runTest {
+    @Test fun userChangeClosesSocketAndDoesNotReconnectAsNewUser() = runBlocking {
         val f = fixture()
         val current = AtomicReference<SocketPrincipal?>(alice)
         repeat(2) {
@@ -168,16 +170,16 @@ class SocketUserBindingTest {
             }))
         }
         f.server.start()
-        val live = LocalLiveSocket(f.client, keys.frameSigner("unused"), backgroundScope, backoffMillis = 1, maxReconnects = 3,
+        val live = LocalLiveSocket(f.client, keys.frameSigner("unused"), this, backoffMillis = 1, maxReconnects = 3,
             userBinding = SocketUserBinding(keys, { current.get() }))
         try {
             live.connect(f.url())
-            val metrics = live.metrics.first { it.terminalError == LocalLiveSocket.USER_CHANGED }
+            val metrics = withTimeout(10_000) { live.metrics.first { it.terminalError == LocalLiveSocket.USER_CHANGED } }
             assertEquals(0, metrics.received) // данные alice не показаны после смены пользователя
             assertEquals(1, metrics.attempts)
             assertFalse(metrics.connected)
             assertEquals(1, f.server.requestCount)
-        } finally { live.close(); runCurrent(); f.shutdown() }
+        } finally { live.close(); f.shutdown() }
     }
 
     @Test fun explicitPrincipalChangeResetsBoundUser() = runTest {

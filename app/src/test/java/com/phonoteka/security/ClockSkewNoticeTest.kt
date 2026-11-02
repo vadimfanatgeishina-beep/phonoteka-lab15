@@ -4,57 +4,58 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** ЛР15: текст для сценария «часы сдвинуты» — проверяем формулировки и отсутствие падений. */
 class ClockSkewNoticeTest {
 
     @Test
-    fun fastClockIsExplained() {
-        val text = ClockSkewNotice.describe(deviceSeconds = 1_000_060, serverSeconds = 1_000_000)
-        assertTrue("должно быть сказано, что часы спешат: $text", text.contains("спешат на 60 с"))
-        assertTrue("должно быть окно: $text", text.contains("±30 с"))
-        assertTrue("должна быть подсказка про синхронизацию: $text", text.contains("синхронизацию"))
+    fun slowClockExplainsTheLagAndWhatToDo() {
+        val text = ClockSkewNotice.describe(deviceSeconds = 1_000, serverSeconds = 1_060)
+        assertTrue(text, text.contains("отстают на 60 с"))
+        assertTrue(text, text.contains("±30 с"))
+        assertTrue(text, text.contains("Настройки → Дата и время"))
+        assertTrue(text, text.contains("nonce"))
     }
 
     @Test
-    fun slowClockIsExplained() {
-        val text = ClockSkewNotice.describe(deviceSeconds = 1_000_000, serverSeconds = 1_000_060)
-        assertTrue("должно быть сказано, что часы отстают: $text", text.contains("отстают на 60 с"))
+    fun fastClockExplainsTheLead() {
+        val text = ClockSkewNotice.describe(deviceSeconds = 1_060, serverSeconds = 1_000)
+        assertTrue(text, text.contains("спешат на 60 с"))
     }
 
     @Test
-    fun driftInsideWindowIsReportedAsFine() {
-        val text = ClockSkewNotice.describe(deviceSeconds = 1_000_005, serverSeconds = 1_000_000)
-        assertTrue("в пределах окна: $text", text.contains("в пределах окна"))
-        assertTrue("не должно быть слова «отклонён»: $text", !text.contains("отклонён"))
+    fun driftInsideTheWindowIsNotAnError() {
+        val text = ClockSkewNotice.describe(deviceSeconds = 1_000, serverSeconds = 1_020)
+        assertTrue(text, text.contains("Рассинхрона нет"))
+        assertTrue(text, text.contains("20 с"))
     }
 
     @Test
-    fun boundaryIsInsideWindow() {
-        val text = ClockSkewNotice.describe(deviceSeconds = 1_000_030, serverSeconds = 1_000_000)
-        assertTrue("ровно 30 с ещё допустимо: $text", text.contains("в пределах окна"))
+    fun exactWindowBoundaryStillPasses() {
+        val text = ClockSkewNotice.describe(deviceSeconds = 1_000, serverSeconds = 1_030)
+        assertTrue(text, text.contains("Рассинхрона нет"))
+        val beyond = ClockSkewNotice.describe(deviceSeconds = 1_000, serverSeconds = 1_031)
+        assertTrue(beyond, beyond.contains("отстают на 31 с"))
     }
 
     @Test
-    fun overflowDoesNotCrash() {
+    fun longOverflowDoesNotCrash() {
         val text = ClockSkewNotice.describe(Long.MIN_VALUE, Long.MAX_VALUE)
-        assertTrue("сообщение должно остаться осмысленным: $text", text.isNotEmpty())
+        assertTrue(text, text.isNotEmpty())
+        assertEquals(0L, ClockSkewNotice.driftSeconds(Long.MIN_VALUE, Long.MAX_VALUE))
+        assertEquals(Long.MIN_VALUE, ClockSkewNotice.driftSeconds(Long.MIN_VALUE, 0))
     }
 
     @Test
-    fun expiredResultUsesTheSameExplanation() {
-        val text = ClockSkewNotice.describeResult(
-            VerificationResult.EXPIRED, deviceSeconds = 1_000_000, serverSeconds = 1_000_120
-        )
-        assertTrue("EXPIRED должен объяснять причину: $text", text.contains("отстают на 120 с"))
+    fun expiredResultReusesTheClockExplanation() {
+        val expected = ClockSkewNotice.describe(deviceSeconds = 940, serverSeconds = 1_000)
+        val actual = ClockSkewNotice.describeResult(VerificationResult.EXPIRED, 940, 1_000)
+        assertEquals(expected, actual)
     }
 
     @Test
-    fun otherResultsStayShort() {
-        assertEquals("Подпись и время приняты.", ClockSkewNotice.describeResult(
-            VerificationResult.ACCEPTED, deviceSeconds = 1_000_000, serverSeconds = 1_000_000
-        ))
-        assertTrue(ClockSkewNotice.describeResult(
-            VerificationResult.REPLAY, deviceSeconds = 1_000_000, serverSeconds = 1_000_000
-        ).contains("Повтор nonce"))
+    fun otherResultsHaveTheirOwnShortText() {
+        assertTrue(ClockSkewNotice.describeResult(VerificationResult.REPLAY, 1_000, 1_000).contains("409"))
+        assertTrue(ClockSkewNotice.describeResult(VerificationResult.INVALID_SIGNATURE, 1_000, 1_000).contains("401"))
+        assertTrue(ClockSkewNotice.describeResult(VerificationResult.INVALID_NONCE, 1_000, 1_000).contains("16–64"))
+        assertTrue(ClockSkewNotice.describeResult(VerificationResult.ACCEPTED, 1_000, 1_000).contains("200"))
     }
 }

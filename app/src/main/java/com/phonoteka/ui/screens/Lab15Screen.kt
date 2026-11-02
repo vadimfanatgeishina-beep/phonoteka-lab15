@@ -45,92 +45,89 @@ import com.phonoteka.security.SignedRequest
 fun Lab15Screen(onBack: () -> Unit) {
     val app = LocalContext.current.applicationContext as PhonotekaApp
     var live by remember { mutableStateOf(false) }
-    var pinDemo by remember { mutableStateOf(false) }
     if (live) { Lab15LiveScreen(onBack = { live = false }); return }
-    if (pinDemo) { Lab15PinScreen(onBack = { pinDemo = false }); return }
     val user by app.lab15User.collectAsStateWithLifecycle()
     var hmacLog by remember { mutableStateOf(listOf<String>()) }
     var e2eeLog by remember { mutableStateOf(listOf<String>()) }
 
-    Scaffold(topBar = {
-        TopAppBar(title = { Text("Безопасная передача · ЛР15") }, navigationIcon = {
-            TextButton(onClick = onBack) { Text("Назад") }
-        })
-    }) { padding ->
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Безопасная передача · ЛР15") },
+                navigationIcon = { TextButton(onClick = onBack) { Text("Назад") } }
+            )
+        }
+    ) { padding ->
         Column(
-            Modifier.fillMaxSize().padding(padding).padding(20.dp).verticalScroll(rememberScrollState()),
+            Modifier.fillMaxSize().padding(padding)
+                .verticalScroll(rememberScrollState()).padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
                 "Release: только HTTPS, системные CA, cleartext запрещён. Debug: свой самоподписанный " +
                     "сертификат localhost + 2 SPKI-пина с expiration.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = MaterialTheme.typography.bodySmall
             )
 
             Lab15Section(
                 title = "1. Подпись запросов (HMAC-SHA256)",
-                description = "Каноническая строка: method, path, sha256(body), timestamp, nonce. " +
-                    "Сервер проверяет подпись, окно ±30 с и уникальность nonce."
+                description = "Один и тот же запрос в четырёх состояниях: норма, повтор nonce, подмена тела, " +
+                    "сдвинутые часы — и расшифровка отказа словами."
             ) {
-                Button(onClick = { hmacLog = runHmacDemo() }) { Text("Проверить 4 случая") }
+                Button(onClick = { hmacLog = runHmacDemo() }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Проверить 4 случая")
+                }
                 if (hmacLog.isNotEmpty()) Lab15Result(hmacLog)
             }
 
             Lab15Section(
                 title = "2. E2EE истории прослушиваний",
-                description = "ECDH P-256 + AES-GCM: на сервере остаётся только шифротекст, " +
-                    "чужой ключ не расшифрует запись."
+                description = "ECDH P-256 + AES-GCM: сервер видит только шифротекст, чужой ключ не расшифровывает."
             ) {
-                Button(onClick = { e2eeLog = runE2eeDemo() }) { Text("Зашифровать и передать") }
+                Button(onClick = { e2eeLog = runE2eeDemo() }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Зашифровать и передать")
+                }
                 if (e2eeLog.isNotEmpty()) Lab15Result(e2eeLog)
             }
 
             Lab15Section(
                 title = "3. WebSocket wss:// со своим стендом",
-                description = "wss://localhost:8444/ws, билет на 30 с, подпись каждого кадра, " +
-                    "переподключение 1/2/4/8/16/30 с. Смена пользователя закрывает сокет."
+                description = "Пользователь сокета: $user. Смена пользователя закрывает сокет (USER_CHANGED)."
             ) {
-                Text("Пользователь сокета: $user", style = MaterialTheme.typography.bodyMedium)
-                OutlinedButton(onClick = { app.lab15SwitchUser() }) { Text("Сменить пользователя (сокет закроется)") }
-                Button(onClick = { live = true }) { Text("Открыть живой WSS") }
-            }
-
-            Lab15Section(
-                title = "4. Pinning: три сценария",
-                description = "Основной сертификат; запасной после ротации; доверенный системой, но не в pin-set. " +
-                    "Только debug, собственный loopback-стенд, фиктивные данные."
-            ) {
-                Button(onClick = { pinDemo = true }) { Text("Открыть сценарии pinning") }
+                OutlinedButton(
+                    onClick = { app.lab15SwitchUser() },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Сменить пользователя (сокет закроется)") }
+                Button(onClick = { live = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Открыть живой WSS")
+                }
             }
         }
     }
 }
 
-/** Секция экрана: заголовок, пояснение и содержимое — в одной карточке, как на экранах ЛР13/ЛР14. */
 @Composable
-private fun Lab15Section(title: String, description: String, content: @Composable () -> Unit) {
+private fun Lab15Section(
+    title: String,
+    description: String,
+    content: @Composable () -> Unit
+) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
-            Text(
-                description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Text(description, style = MaterialTheme.typography.bodySmall)
             content()
         }
     }
 }
 
-/** Ответ на действие: отдельная карточка, чтобы результат нельзя было принять за пояснение. */
 @Composable
 private fun Lab15Result(lines: List<String>) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("Результат", style = MaterialTheme.typography.labelSmall)
-            lines.forEach { line ->
-                Text(line, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+            lines.forEach {
+                Text(it, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
             }
         }
     }
@@ -155,7 +152,6 @@ private fun runHmacDemo(): List<String> {
         "Тот же nonce ещё раз → $r2 (HTTP 409)",
         "Подменили тело → $r3 (HTTP 401)",
         "Время на 60 с старше → $r4 (HTTP 401, окно ±30 с)",
-        // ЛР15, Шаг 8: вместо «401» — объяснение, что случилось с часами и что делать.
         ClockSkewNotice.describeResult(r4, old.timestampSeconds, now)
     )
 }

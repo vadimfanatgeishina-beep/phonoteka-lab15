@@ -23,7 +23,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
@@ -46,13 +45,20 @@ fun Lab15LiveScreen(onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     val app = LocalContext.current.applicationContext as com.phonoteka.PhonotekaApp
     val keys = remember { runCatching { UserBoundSocketKeys(BuildConfig.LOCAL_FIXTURE_KEY.toByteArray()) }.getOrNull() }
+
     if (BuildConfig.LOCAL_FIXTURE_KEY.isEmpty() || keys == null) {
-        Scaffold(topBar = {
-            TopAppBar(title = { Text("Живой WSS · ЛР15") }, navigationIcon = {
-                TextButton(onClick = onBack) { Text("Назад") }
-            })
-        }) { padding ->
-            Column(Modifier.fillMaxSize().padding(padding).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Живой WSS · ЛР15") },
+                    navigationIcon = { TextButton(onClick = onBack) { Text("Назад") } }
+                )
+            }
+        ) { padding ->
+            Column(
+                Modifier.fillMaxSize().padding(padding).padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 Text(
                     "Локальный WSS отключён: соберите debug с переменной PHONOTEKA_MOCK_HMAC_KEY " +
                         "(≥ 16 символов, учебный ключ). Реальные секреты не вводите.",
@@ -62,48 +68,59 @@ fun Lab15LiveScreen(onBack: () -> Unit) {
         }
         return
     }
+
     // Текущий пользователь сокета = учебный пользователь ЛР15 + версия сессии.
     val binding = remember {
         SocketUserBinding(keys, currentPrincipal = { SocketPrincipal(app.lab15User.value, app.principalChanges.epoch.value) })
     }
     val client = remember { LocalMockTlsClient.create(BuildConfig.LOCAL_FIXTURE_KEY.toByteArray()) }
     val socket = remember {
-        LocalLiveSocket(client, HmacTextFrameSigner(SecretKeySpec(BuildConfig.LOCAL_FIXTURE_KEY.toByteArray(), "HmacSHA256")), scope,
-            userBinding = binding)
+        LocalLiveSocket(
+            client,
+            HmacTextFrameSigner(SecretKeySpec(BuildConfig.LOCAL_FIXTURE_KEY.toByteArray(), "HmacSHA256")),
+            scope,
+            userBinding = binding
+        )
     }
     val metrics by socket.metrics.collectAsStateWithLifecycle()
     // Смена пользователя сразу закрывает сокет (USER_CHANGED).
     LaunchedEffect(socket) {
         PrincipalChangeSignal.changes(app.principalChanges.epoch).collect { socket.onPrincipalChanged() }
     }
-    DisposableEffect(socket) { onDispose { socket.close(); client.dispatcher.executorService.shutdown(); client.connectionPool.evictAll() } }
+    DisposableEffect(socket) {
+        onDispose {
+            socket.close()
+            client.dispatcher.executorService.shutdown()
+            client.connectionPool.evictAll()
+        }
+    }
 
-    Scaffold(topBar = {
-        TopAppBar(title = { Text("Живой WSS · ЛР15") }, navigationIcon = {
-            TextButton(onClick = onBack) { Text("Назад") }
-        })
-    }) { padding ->
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Живой WSS · ЛР15") },
+                navigationIcon = { TextButton(onClick = onBack) { Text("Назад") } }
+            )
+        }
+    ) { padding ->
         Column(
-            Modifier.fillMaxSize().padding(padding).padding(20.dp).verticalScroll(rememberScrollState()),
+            Modifier.fillMaxSize().padding(padding)
+                .verticalScroll(rememberScrollState()).padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                "wss://localhost:8444/ws — TLS-пин, билет пользователя на 30 с, подпись каждого кадра, " +
-                    "переподключение 1/2/4/8/16/30 с.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                "localhost:8444/ws; TLS-пин, билет пользователя на 30 с, подпись каждого кадра, " +
+                    "backoff 1/2/4/8/16/30 с.",
+                style = MaterialTheme.typography.bodySmall
             )
 
             Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Состояние канала", style = MaterialTheme.typography.titleMedium)
                     Lab15Metric("Пользователь", metrics.boundUserTag?.let { "#$it" } ?: "—")
                     Lab15Metric("Соединение", if (metrics.connected) "подключено" else "нет")
-                    Lab15Metric("Попыток", metrics.attempts.toString())
-                    Lab15Metric("Переподключений", metrics.reconnects.toString())
-                    Lab15Metric("Отправлено", metrics.sent.toString())
-                    Lab15Metric("Получено", metrics.received.toString())
-                    Lab15Metric("Отклонено кадров", metrics.rejected.toString())
+                    Lab15Metric("Попытки", "${metrics.attempts} (переподключений: ${metrics.reconnects})")
+                    Lab15Metric("Кадры", "отправлено ${metrics.sent} · принято ${metrics.received} · отклонено ${metrics.rejected}")
                     metrics.terminalError?.let {
                         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                     }
@@ -125,13 +142,8 @@ fun Lab15LiveScreen(onBack: () -> Unit) {
 
 @Composable
 private fun Lab15Metric(label: String, value: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            label,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f)
-        )
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, style = MaterialTheme.typography.bodySmall)
         Text(value, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
     }
 }
