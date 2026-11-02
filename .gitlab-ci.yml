@@ -1,0 +1,22 @@
+stages: [verify]
+android-source-validation:
+  stage: verify
+  # Register your own runner with JDK17/Android SDK34. No account credentials are needed by tests.
+  tags: [android-sdk34-jdk17]
+  timeout: 40m
+  script:
+    - unset PHONOTEKA_MOCK_HMAC_KEY
+    - chmod +x gradlew
+    - ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleRelease :app:assembleDebugAndroidTest --no-daemon
+  artifacts:
+    when: always
+    expire_in: 7 days
+    reports:
+      junit: app/build/test-results/testDebugUnitTest/TEST-*.xml
+    paths:
+      - app/build/reports/tests/testDebugUnitTest/
+      - app/build/reports/lint-results-debug.html
+      - app/build/reports/lint-results-debug.xml
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'

@@ -1,0 +1,13 @@
+<resources>
+    <color name="ic_launcher_background">#6451C5</color>
+    <color name="purple_primary">#6451C5</color>
+    <color name="purple_dark">#5140AE</color>
+    <color name="purple_pale">#EEEBFC</color>
+    <color name="green_ok">#21735A</color>
+    <color name="amber_warn">#946320</color>
+    <color name="red_err">#C0392B</color>
+    <color name="bg_light">#F5F4F1</color>
+    <color name="ink_dark">#282631</color>
+    <color name="bg_dark">#1A181E</color>
+    <color name="ink_light">#E5E2E9</color>
+</resources>

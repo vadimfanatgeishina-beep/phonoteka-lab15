@@ -1,0 +1,46 @@
+# ЛР16 (доп.): CI — SAST (Semgrep: правило «токен в логе»), Gitleaks, JVM-тесты, lint, стенды ЛР16 и identity-backend.
+name: android-security
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  sast:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Semgrep (token log rule)
+        run: |
+          pip install semgrep==1.*
+          semgrep scan --metrics=off --error --config tools/semgrep-security.yml app/src/main/java
+      - name: Gitleaks (history)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  java-stands:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '22' }
+      - run: java tools/lab16/Lab16VariantsTest.java .
+      - run: java tools/backend/IdentityServerTest.java
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: android-actions/setup-android@v3
+      - run: chmod +x gradlew
+      - run: ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleRelease :app:assembleDebugAndroidTest --no-daemon
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports
+          path: |
+            app/build/reports/tests/testDebugUnitTest/
+            app/build/reports/lint-results-debug.html

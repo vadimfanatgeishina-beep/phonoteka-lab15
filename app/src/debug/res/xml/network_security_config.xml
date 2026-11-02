@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors><certificates src="system" /></trust-anchors>
+    </base-config>
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="false">localhost</domain>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="@raw/local_mock_cert" />
+            <certificates src="@raw/local_mock_backup_cert" />
+        </trust-anchors>
+        <pin-set expiration="2036-01-01">
+            <pin digest="SHA-256">1fqCAYJX7VPXlLJ1ATLQRlxexbVwFpvLtZadUQxYwwU=</pin>
+            <pin digest="SHA-256">E8OZRSghu3t1p/Z5p2yP7Oa6gMgV7U8EVBGIyiXVWQw=</pin>
+        </pin-set>
+    </domain-config>
+    <!--
+        ЛР15, Шаг 2 и Шаг 6: единственное законное место для CA mitmproxy.
+        Блок действует только при android:debuggable="true" (debug-сборка), в release его нет.
+        Доверие user-CA нужно для эксперимента «без пиннинга трафик читается»;
+        на localhost pin-set продолжает действовать, поэтому сценарий «с пиннингом» по-прежнему рвётся.
+    -->
+    <debug-overrides>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </debug-overrides>
+</network-security-config>

@@ -1,0 +1,16 @@
+<resources>
+    <string name="app_name">Лаба 15 исправ</string>
+    <string name="welcome">Добро пожаловать</string>
+    <string name="go_to_list">Перейти к списку треков</string>
+    <string name="settings">Настройки</string>
+    <string name="dark_theme">Тёмная тема</string>
+    <string name="download_source">Источник загрузки</string>
+    <string name="download">Скачать</string>
+    <string name="retry">Повторить</string>
+    <string name="refresh">Обновить</string>
+    <string name="load_more">Загрузить ещё</string>
+    <string name="no_data">Больше нет данных</string>
+    <string name="not_found">Элемент не найден</string>
+    <string name="back">Назад</string>
+    <string name="search_hint">Исполнитель, песня…</string>
+</resources>

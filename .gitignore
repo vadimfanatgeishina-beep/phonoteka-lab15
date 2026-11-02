@@ -1,0 +1,16 @@
+.gradle/
+**/build/
+.local/
+local.properties
+.idea/
+*.jks
+*.keystore
+*.pem
+*.p12
+*.key
+.env
+secrets.properties
+google-services.json
+/work/gitlab-push-phonoteka/
+/lab_reports/source_text/
+**/deploy_ed25519
