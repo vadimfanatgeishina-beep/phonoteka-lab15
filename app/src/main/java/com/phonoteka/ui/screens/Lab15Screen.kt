@@ -46,6 +46,8 @@ fun Lab15Screen(onBack: () -> Unit) {
     val app = LocalContext.current.applicationContext as PhonotekaApp
     var live by remember { mutableStateOf(false) }
     if (live) { Lab15LiveScreen(onBack = { live = false }); return }
+    var pinning by remember { mutableStateOf(false) }
+    if (pinning) { Lab15PinScreen(onBack = { pinning = false }); return }
     val user by app.lab15User.collectAsStateWithLifecycle()
     var hmacLog by remember { mutableStateOf(listOf<String>()) }
     var e2eeLog by remember { mutableStateOf(listOf<String>()) }
@@ -100,6 +102,16 @@ fun Lab15Screen(onBack: () -> Unit) {
                 ) { Text("Сменить пользователя (сокет закроется)") }
                 Button(onClick = { live = true }, modifier = Modifier.fillMaxWidth()) {
                     Text("Открыть живой WSS")
+                }
+            }
+
+            Lab15Section(
+                title = "4. Пиннинг и ротация",
+                description = "Пять сценариев на реальном TLS: основной пин, запасной после ротации, " +
+                    "доверенный-но-не-в-pin-set, режим без пиннинга, запись в журнал."
+            ) {
+                Button(onClick = { pinning = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Открыть сценарии pinning")
                 }
             }
         }
